@@ -46,4 +46,68 @@ birthday_results |>
 ```
 The estimated probability of at least two people sharing a birthday increases with group size and reaches approximately 50% at 23 people.
 
+## Problem 2
+```{r}
+subject_files =
+  tibble(
+    file_path = list.files(path = "data", full.names = TRUE)
+  ) |>
+  mutate(
+    file_name = basename(file_path),
+    observations = purrr::map(
+      file_path,
+      \(path) read_csv(path, show_col_types = FALSE)
+    )
+  )
+
+longitudinal_df =
+  subject_files |>
+  select(file_name, observations) |>
+  mutate(file_name = str_remove(file_name, "\\.csv$")) |>
+  separate_wider_delim(
+    file_name,
+    delim = "_",
+    names = c("arm", "subject_id")
+  ) |>
+  mutate(
+    arm = factor(
+      arm,
+      levels = c("con", "exp"),
+      labels = c("Control", "Experimental")
+    )
+  ) |>
+  unnest(observations) |>
+  pivot_longer(
+    cols = starts_with("week_"),
+    names_to = "week",
+    names_prefix = "week_",
+    names_transform = list(week = as.integer),
+    values_to = "observation"
+  )
+
+longitudinal_df
+```
+
+```{r}
+longitudinal_df |>
+  ggplot(
+    aes(
+      x = week,
+      y = observation,
+      group = interaction(arm, subject_id),
+      color = arm
+    )
+  ) +
+  geom_line(alpha = 0.7) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  facet_wrap(vars(arm)) +
+  scale_x_continuous(breaks = 1:8) +
+  labs(
+    title = "Weekly observations by study arm",
+    x = "Week",
+    y = "Observation"
+  ) +
+  theme(legend.position = "none")
+```
+Observations generally increased over time in the experimental arm, while those in the control arm fluctuated without a clear upward trend. All 10 participants in the experimental arm had higher observations at week 8 than at week 1.
 
