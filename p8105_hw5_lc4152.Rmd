@@ -111,3 +111,102 @@ longitudinal_df |>
 ```
 Observations generally increased over time in the experimental arm, while those in the control arm fluctuated without a clear upward trend. All 10 participants in the experimental arm had higher observations at week 8 than at week 1.
 
+## Problem 3
+```{r}
+set.seed(8106)
+
+sample_size = 30
+population_sd = 5
+alpha = 0.05
+n_simulations = 5000
+
+simulate_t_test = function(true_mean) {
+  sample_values = rnorm(
+    n = sample_size,
+    mean = true_mean,
+    sd = population_sd
+  )
+
+  t.test(sample_values, mu = 0, alternative = "two.sided") |>
+    broom::tidy() |>
+    select(estimate, p.value)
+}
+
+t_test_results =
+  expand_grid(
+    true_mean = 0:6,
+    simulation = seq_len(n_simulations)
+  ) |>
+  mutate(result = map(true_mean, simulate_t_test)) |>
+  unnest(result) |>
+  mutate(rejected = p.value < alpha)
+
+t_test_summary =
+  t_test_results |>
+  group_by(true_mean) |>
+  summarize(
+    rejection_rate = mean(rejected),
+    all_estimates = mean(estimate),
+    rejected_estimates = mean(estimate[rejected]),
+    .groups = "drop"
+  )
+
+t_test_summary
+```
+
+```{r}
+t_test_summary |>
+  ggplot(aes(x = true_mean, y = rejection_rate)) +
+  geom_line(linewidth = 0.9, color = "#256D85") +
+  geom_point(size = 2.5, color = "#256D85") +
+  scale_x_continuous(breaks = 0:6) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    labels = scales::label_percent()
+  ) +
+  labs(
+    title = "Rejection rate of the one-sample t-test",
+    x = "True mean",
+    y = "Proportion of tests rejecting the null"
+  )
+```
+At a true mean of zero, the rejection rate is close to 5%, the nominal Type I error rate. As the true mean increases from 1 to 6, the effect size grows and the power approaches 100%.
+```{r}
+t_test_summary |>
+  select(true_mean, all_estimates, rejected_estimates) |>
+  pivot_longer(
+    cols = c(all_estimates, rejected_estimates),
+    names_to = "sample_set",
+    values_to = "average_estimate"
+  ) |>
+  mutate(
+    sample_set = recode(
+      sample_set,
+      all_estimates = "All simulations",
+      rejected_estimates = "Null rejected"
+    )
+  ) |>
+  ggplot(
+    aes(x = true_mean, y = average_estimate, color = sample_set)
+  ) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dashed",
+    color = "gray60"
+  ) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.5) +
+  scale_x_continuous(breaks = 0:6) +
+  scale_color_manual(
+    values = c("All simulations" = "#256D85", "Null rejected" = "#B54A32")
+  ) +
+  labs(
+    title = "Average estimated mean across simulations",
+    x = "True mean",
+    y = "Average estimated mean",
+    color = NULL
+  ) +
+  theme(legend.position = "bottom")
+```
+Across all simulations, the average estimated mean closely followed the true mean. When only simulations that rejected the null were included, the average estimate was higher than the true mean for small positive effects. For example, when the true mean was 1, the average estimate among significant results was about 2.2. This occurs because unusually large positive sample means are more likely to produce significant results when the true effect is small. As power increased, nearly all simulations rejected the null, and the two averages converged.
